@@ -1,4 +1,4 @@
-import { OpenAIStream, StreamingTextResponse } from 'ai';
+import { StreamingTextResponse } from 'ai';
 import OpenAI from 'openai';
 import { createOpenAIConfig } from '@/lib/ai-gateway';
 
@@ -49,18 +49,27 @@ export async function POST(req: Request) {
       stream: true,
     });
 
-    // Convert the response to a stream
-    const stream = OpenAIStream(response, {
-      onStart: async () => {
-        console.log('🔄 Stream started');
-      },
-      onToken: async (token: string) => {
-        // Optional: Track token usage
-        // console.log('Token:', token);
-      },
-      onCompletion: async (completion: string) => {
-        console.log('✅ Stream completed');
-        console.log('📊 Check analytics:', 'https://dash.cloudflare.com/fe867c47829b4a3be82e1ad1401e724f/ai/ai-gateway/main-ai-gateway');
+    console.log('🔄 Stream started');
+
+    // Create a ReadableStream from the OpenAI response
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        try {
+          for await (const chunk of response) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+              controller.enqueue(encoder.encode(content));
+            }
+          }
+          console.log('✅ Stream completed');
+          console.log('📊 Check analytics:', 'https://dash.cloudflare.com/fe867c47829b4a3be82e1ad1401e724f/ai/ai-gateway/main-ai-gateway');
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.error(error);
+        } finally {
+          controller.close();
+        }
       },
     });
 
